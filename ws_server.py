@@ -6,10 +6,10 @@ import datetime
 import sys
 from aiohttp import web
 
-# Dosyaların bulunduğu dizini belirtin
-base_path = r"C:\Users\iRony\Desktop\local"
-os.chdir(base_path)
+# Docker/Linux ortamında /app yolunu kullanabilirsiniz (Klasörünüz Dockerfile'da /app'e kopyalanıyor)
+base_path = "/app"
 
+# bagislar.json ve log dosyasının tam yollarını ayarlayın
 json_dosya = os.path.join(base_path, "bagislar.json")
 log_dosya = os.path.join(base_path, "bagis_log.txt")
 
@@ -24,16 +24,14 @@ if os.path.exists(json_dosya):
         sys.stdout.flush()
 
 donation_hash_set = set()
-active_channels = {}           # Örneğin: {"Kanal 1": "Bağlandı, süre: mm:ss", "Kanal 2": "Bağlandı, süre: mm:ss"}
-connection_start_times = {}    # Her kanal için bağlantı başlangıç zamanını saklar
-clients = set()                # Bağlı istemcileri tutan set
+active_channels = {}
+connection_start_times = {}
+clients = set()
 
-internet_status = "Internet: Çevrimiçi"  # Varsayılan internet durumu
-
-# ANSI renk kodları
-GREEN = "\033[92m"   # Yeşil
-RED   = "\033[91m"   # Kırmızı
-RESET = "\033[0m"    # Renk sıfırlama
+# Renk kodları (isteğe bağlı)
+GREEN = "\033[92m"
+RED   = "\033[91m"
+RESET = "\033[0m"
 
 def print_active_channels():
     output = ""
@@ -55,7 +53,6 @@ async def status_updater():
         await asyncio.sleep(1)
 
 def bagis_ekle(mesaj):
-    # Gelen bağış mesajını işleyip global 'bagislar' listesine ekleyen fonksiyon.
     print(f"Yeni Bağış Geldi: {mesaj}")
     sys.stdout.flush()
     try:
@@ -67,16 +64,19 @@ def bagis_ekle(mesaj):
         amount_raw = parcalar[2].strip()
         donation_type = parcalar[3].strip()
         message_text = " - ".join(parcalar[4:]).strip()
+
         m = re.search(r"([\d\.,]+)", amount_raw)
         if not m:
             raise ValueError("Miktar bulunamadı")
         amount = float(m.group(1).replace(",", "."))
-        # Kısa sürede aynı bağış tekrar gönderilirse atla.
+
+        # Kısa sürede aynı bağış tekrar geldiyse atla
         if bagislar:
             last = bagislar[-1]
             diff = datetime.datetime.now() - datetime.datetime.strptime(last["tarih"], "%Y-%m-%d %H:%M:%S")
             if last["isim"] == name and last["miktar"] == amount and diff.total_seconds() < 60:
                 return
+
         data = {
             "kanal": kanal,
             "isim": name,
@@ -101,9 +101,9 @@ async def websocket_handler(request):
     print("✅ Yeni bağlantı kuruldu.")
     sys.stdout.flush()
     current_channel = None
+
     async for msg in ws:
         if msg.type == web.WSMsgType.TEXT:
-            # Heartbeat mesajı: beklenen format "connection active (Kanal X): mm:ss"
             if msg.data.startswith("connection active") or msg.data.startswith("ping"):
                 m = re.match(r"(?:connection active|ping)\s*\((.*?)\):", msg.data)
                 if m:
@@ -118,6 +118,7 @@ async def websocket_handler(request):
         elif msg.type == web.WSMsgType.ERROR:
             print(f"❌ WS bağlantı hatası: {ws.exception()}")
             sys.stdout.flush()
+
     clients.discard(ws)
     if current_channel:
         active_channels[current_channel] = "Sekme kapatıldı"
@@ -142,12 +143,14 @@ async def reset_handler(request):
     except Exception as e:
         print("JSON dosyası silinirken hata:", e)
         sys.stdout.flush()
+
     for client in list(clients):
         try:
             await client.send_str("reset")
         except Exception as e:
             print("Reset mesajı gönderilemedi:", e)
             sys.stdout.flush()
+
     return web.Response(
         text="Donations reset.",
         headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
@@ -159,15 +162,20 @@ async def start_http_server():
         web.get("/ws", websocket_handler),
         web.get("/reset", reset_handler)
     ])
+
+    # Docker veya Railway ortamında PORT değişkeni atanabilir
+    # Varsayılan 5679 bırakabilirsiniz
     port = int(os.environ.get("PORT", 5679))
     print(f"🚀 Sunucu başlatılıyor (port {port})...")
     sys.stdout.flush()
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"HTTP server started at http://localhost:{port} (accessible locally)")
     sys.stdout.flush()
+
     asyncio.create_task(status_updater())
     while True:
         await asyncio.sleep(3600)
