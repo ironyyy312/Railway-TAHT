@@ -1,29 +1,26 @@
-# 1. Aşama: Python uygulamanızı hazırlayın
-FROM python:3.10-slim as builder
+FROM python:3.10-slim
 
+# Nginx kuruyoruz
+RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
+
+# Proje klasörünü belirleyin
 WORKDIR /app
 
-# Gerekli bağımlılıkları yükleyin
+# Python bağımlılıklarını yükleyin
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Tüm proje dosyalarını kopyalayın (ws_server.py, bagislar.json, bagis_log.txt, entrypoint.sh, nginx.conf, HTML dosyaları vs.)
+# Tüm dosyaları kopyalayın (ws_server.py, bagislar.json, tahta.html, sure.html, entrypoint.sh, nginx.conf vs.)
 COPY . /app
 
-# 2. Aşama: Nginx ve Python uygulamanızı çalıştıracak imajı oluşturun
-FROM nginx:alpine
-
-# Nginx yapılandırma dosyasını kopyalayın
+# Nginx konfigürasyonunu yerleştirin (nginx.conf'ı default.conf'a kopyalayabilirsiniz)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Python uygulamanızın dosyalarını kopyalayın
-COPY --from=builder /app /app
+# entrypoint.sh (LF formatlı) dosyanızı kopyalayıp çalıştırma izni verin
+RUN chmod +x /app/entrypoint.sh
 
-# entrypoint.sh dosyasını kopyalayın (dosyanızın LF formatında olduğundan emin olun)
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Railway genellikle 80 portunu kullanır
+# Railway genelde 80 portunu açar
 EXPOSE 80
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Container başlarken hem Nginx'i hem Python'u başlatmak için entrypoint.sh kullanıyoruz
+ENTRYPOINT ["/app/entrypoint.sh"]
