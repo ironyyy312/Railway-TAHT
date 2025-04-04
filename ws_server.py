@@ -44,7 +44,6 @@ def print_active_channels():
     sys.stdout.flush()
 
 async def status_updater():
-    global internet_status
     while True:
         now = datetime.datetime.now()
         for channel in connection_start_times:
@@ -56,6 +55,7 @@ async def status_updater():
         await asyncio.sleep(1)
 
 def bagis_ekle(mesaj):
+    # Gelen bağış mesajını işleyip global 'bagislar' listesine ekleyen fonksiyon.
     print(f"Yeni Bağış Geldi: {mesaj}")
     sys.stdout.flush()
     try:
@@ -71,6 +71,7 @@ def bagis_ekle(mesaj):
         if not m:
             raise ValueError("Miktar bulunamadı")
         amount = float(m.group(1).replace(",", "."))
+        # Kısa sürede aynı bağış tekrar gönderilirse atla.
         if bagislar:
             last = bagislar[-1]
             diff = datetime.datetime.now() - datetime.datetime.strptime(last["tarih"], "%Y-%m-%d %H:%M:%S")
@@ -102,6 +103,7 @@ async def websocket_handler(request):
     current_channel = None
     async for msg in ws:
         if msg.type == web.WSMsgType.TEXT:
+            # Heartbeat mesajı: beklenen format "connection active (Kanal X): mm:ss"
             if msg.data.startswith("connection active") or msg.data.startswith("ping"):
                 m = re.match(r"(?:connection active|ping)\s*\((.*?)\):", msg.data)
                 if m:
